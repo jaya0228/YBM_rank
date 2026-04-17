@@ -89,6 +89,7 @@ function BookCard({ book }: { book: AggregatedBook }) {
           src={book.coverImage}
           alt={book.title}
           className="w-14 h-20 object-cover rounded flex-shrink-0"
+          referrerPolicy="no-referrer"
         />
       )}
 
