@@ -43,12 +43,16 @@ export async function scrapeKyobo(): Promise<BookRank[]> {
           // 저자 또는 제목에 YBM/ETS 포함 여부 확인
           if (!isYbmOrEts(authorText) && !isYbmOrEts(title)) return;
 
-          const pid = checkbox.attr("data-pid") ?? "";
           const href = $(el).find("a.prod_link").attr("href") ?? "";
+          // pid: data-pid → URL에서 추출 순으로 fallback
+          const pid =
+            checkbox.attr("data-pid") ||
+            href.match(/\/detail\/(S[^/?]+)/)?.[1] ||
+            "";
           const url = href || (pid ? `https://product.kyobobook.co.kr/detail/${pid}` : "");
           const coverImage = pid
             ? `https://contents.kyobobook.co.kr/sih/fit-in/200x0/product/${pid}.jpg`
-            : $(el).find("img").attr("src");
+            : undefined;
 
           seen.add(title);
           results.push({ title, author: authorText || query, rank: globalRank++, url, coverImage });

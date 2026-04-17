@@ -34,8 +34,10 @@ export async function scrapeYes24(): Promise<BookRank[]> {
   let globalRank = 1;
 
   const targets = [
-    { cat: "001001", pages: [1, 2, 3, 4, 5] },
-    { cat: "001011", pages: [1, 2, 3] },
+    { cat: "001001", pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }, // 국어/외국어
+    { cat: "001011", pages: [1, 2, 3, 4, 5] },                   // 수험/자격증
+    { cat: "001001001", pages: [1, 2, 3, 4, 5] },                // 영어
+    { cat: "001011002", pages: [1, 2, 3] },                      // 어학시험
   ];
 
   for (const { cat, pages } of targets) {
