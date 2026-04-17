@@ -21,15 +21,9 @@ function isYbm(text: string): boolean {
   return lower.includes("ybm") || lower.includes("와이비엠");
 }
 
-async function fetchEucKr(url: string): Promise<string> {
-  const { data } = await axios.get(url, {
-    headers: HEADERS,
-    timeout: 15000,
-    responseType: "arraybuffer",
-  });
-  const decoded = new TextDecoder("euc-kr").decode(data as ArrayBuffer);
-  // cheerio가 charset=euc-kr 메타태그 보고 재해석하지 않도록 utf-8로 교체
-  return decoded.replace(/charset=["']?euc-kr["']?/gi, 'charset="utf-8"');
+async function fetchPage(url: string): Promise<string> {
+  const { data } = await axios.get(url, { headers: HEADERS, timeout: 15000 });
+  return data as string;
 }
 
 // Yes24 검색은 JS 렌더링이라 서버에서 안 됨 → SSR 베스트셀러 페이지 사용
@@ -47,7 +41,7 @@ export async function scrapeYes24(): Promise<BookRank[]> {
   for (const { cat, pages } of targets) {
     for (const page of pages) {
       try {
-        const html = await fetchEucKr(
+        const html = await fetchPage(
           `https://www.yes24.com/Product/Category/BestSeller?CategoryNumber=${cat}&sumgb=09&PageNumber=${page}`
         );
         const $ = cheerio.load(html);
