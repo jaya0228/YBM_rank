@@ -19,7 +19,12 @@ export function aggregateRankings(
   const map = new Map<string, AggregatedBook>();
 
   const normalize = (title: string) =>
-    title.replace(/\s+/g, "").toLowerCase();
+    title
+      .toLowerCase()
+      .replace(/\s+/g, "")           // 공백 제거
+      .replace(/[^\w가-힣]/g, "")    // 특수문자 제거 (Vol. → Vol, [ ] 등)
+      .replace(/volume/g, "vol")     // volume → vol 통일
+      .trim();
 
   for (const book of yes24) {
     const key = normalize(book.title);
