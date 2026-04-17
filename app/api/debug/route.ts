@@ -20,20 +20,19 @@ export async function GET() {
     );
     const $ = cheerio.load(data);
 
-    // /Product/Goods/ 링크가 있는 실제 책 항목 찾기
-    let bookItemHtml = "없음";
-    let bookCount = 0;
+    // .goods_auth 텍스트 샘플 수집
+    const authSamples: string[] = [];
+    let ybmCount = 0;
     $(".goods_info").each((_, el) => {
       const href = $(el).find(".goods_name a").attr("href") ?? "";
-      if (href.includes("/Product/Goods/")) {
-        bookCount++;
-        if (bookItemHtml === "없음") {
-          bookItemHtml = $.html(el).slice(0, 1500);
-        }
-      }
+      if (!href.includes("/Product/Goods/")) return;
+      const auth = $(el).find(".goods_auth").text().trim();
+      if (authSamples.length < 10) authSamples.push(auth);
+      const lower = auth.toLowerCase().replace(/\s+/g, "");
+      if (lower.includes("ybm") || lower.includes("와이비엠")) ybmCount++;
     });
 
-    result.yes24 = { bookCount, bookItemHtml };
+    result.yes24 = { ybmCount, authSamples };
   } catch (e) {
     result.yes24 = { status: "error", message: String(e) };
   }
@@ -46,11 +45,19 @@ export async function GET() {
     );
     const $k = cheerio.load(data);
     const first = $k(".prod_item").first();
-    const fullHtml = first.html()?.slice(0, 2000) ?? "없음";
-    const imgSrc = first.find("img").first().attr("src") ?? "없음";
-    const imgDataSrc = first.find("img").first().attr("data-src") ?? "없음";
-    const imgDataOriginal = first.find("img").first().attr("data-original") ?? "없음";
-    result.kyobo = { fullHtml, imgSrc, imgDataSrc, imgDataOriginal };
+    const pid = first.find("input.result_checkbox").attr("data-pid") ?? "";
+    const constructedImgUrl = pid
+      ? `https://contents.kyobobook.co.kr/sih/fit-in/200x0/product/${pid}.jpg`
+      : "pid없음";
+    // 이미지 URL 실제 접근 가능 여부 확인
+    let imgStatus = "미확인";
+    if (pid) {
+      try {
+        const r = await axios.head(constructedImgUrl, { timeout: 5000 });
+        imgStatus = String(r.status);
+      } catch { imgStatus = "접근실패"; }
+    }
+    result.kyobo = { pid, constructedImgUrl, imgStatus };
   } catch (e) {
     result.kyobo = { status: "error", message: String(e) };
   }
