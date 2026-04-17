@@ -38,22 +38,21 @@ export async function GET() {
     result.yes24 = { status: "error", message: String(e) };
   }
 
-  // 교보: search.kyobobook.co.kr 셀렉터 파악
+  // 교보: target 파라미터 없이 시도
   try {
     const { data } = await axios.get(
-      "https://search.kyobobook.co.kr/search?keyword=YBM&target=author",
+      "https://search.kyobobook.co.kr/search?keyword=YBM",
       { headers: HEADERS, timeout: 10000 }
     );
     const $k = cheerio.load(data);
     const selectors: Record<string, number> = {};
     for (const sel of [
       ".prod_item", ".book_item", "li.item", ".search_item",
-      "[class*='prod_item']", "[class*='book']", "[class*='item']",
-      ".result_item", ".list_item", "ul.list li", ".prod_info",
+      "[class*='prod_item']", "[class*='book']", "ul.list li",
+      ".result_item", ".list_item", ".prod_info", ".item_info",
     ]) {
       selectors[sel] = $k(sel).length;
     }
-    // 가장 많이 나온 셀렉터의 첫 항목 HTML
     const bestSel = Object.entries(selectors).sort((a, b) => b[1] - a[1])[0];
     const firstHtml = bestSel[1] > 0 ? $k(bestSel[0]).first().html()?.slice(0, 1000) : "없음";
     result.kyobo = { selectors, bestSel, firstHtml };
