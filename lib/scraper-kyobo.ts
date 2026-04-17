@@ -46,9 +46,9 @@ export async function scrapeKyobo(): Promise<BookRank[]> {
           const pid = checkbox.attr("data-pid") ?? "";
           const href = $(el).find("a.prod_link").attr("href") ?? "";
           const url = href || (pid ? `https://product.kyobobook.co.kr/detail/${pid}` : "");
-          const coverImage =
-            $(el).find("img").attr("src") ||
-            $(el).find("img").attr("data-src");
+          const coverImage = pid
+            ? `https://contents.kyobobook.co.kr/sih/fit-in/200x0/product/${pid}.jpg`
+            : $(el).find("img").attr("src");
 
           seen.add(title);
           results.push({ title, author: authorText || query, rank: globalRank++, url, coverImage });

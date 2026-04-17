@@ -13,14 +13,22 @@ const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
   "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
-  "Accept-Encoding": "gzip, deflate, br",
-  "Connection": "keep-alive",
   "Referer": "https://www.yes24.com/",
 };
 
 function isYbmAuthor(author: string): boolean {
   const lower = author.toLowerCase().replace(/\s+/g, "");
   return lower.includes("ybm") || lower.includes("와이비엠");
+}
+
+async function fetchPage(url: string): Promise<string> {
+  const { data } = await axios.get(url, {
+    headers: HEADERS,
+    timeout: 20000,
+    responseType: "arraybuffer",
+  });
+  // Yes24는 EUC-KR 인코딩으로 응답
+  return new TextDecoder("euc-kr").decode(data as ArrayBuffer);
 }
 
 export async function scrapeYes24(): Promise<BookRank[]> {
@@ -30,11 +38,10 @@ export async function scrapeYes24(): Promise<BookRank[]> {
 
   for (const page of [1, 2, 3, 4, 5]) {
     try {
-      const { data } = await axios.get(
-        `https://www.yes24.com/Product/Search?domain=BOOK&query=%EC%99%80%EC%9D%B4%EB%B9%84%EC%97%A0&keyfield=author&PageNumber=${page}`,
-        { headers: HEADERS, timeout: 20000 }
+      const html = await fetchPage(
+        `https://www.yes24.com/Product/Search?domain=BOOK&query=%EC%99%80%EC%9D%B4%EB%B9%84%EC%97%A0&keyfield=author&PageNumber=${page}`
       );
-      const $ = cheerio.load(data);
+      const $ = cheerio.load(html);
 
       $(".goods_info").each((_, el) => {
         const titleEl = $(el).find(".goods_name a");
