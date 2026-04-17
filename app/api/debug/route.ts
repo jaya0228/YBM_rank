@@ -38,24 +38,19 @@ export async function GET() {
     result.yes24 = { status: "error", message: String(e) };
   }
 
-  // 교보: target 파라미터 없이 시도
+  // 교보: 첫 번째 .prod_item 전체 HTML + 이미지 URL 확인
   try {
     const { data } = await axios.get(
       "https://search.kyobobook.co.kr/search?keyword=YBM",
-      { headers: HEADERS, timeout: 10000 }
+      { headers: HEADERS, timeout: 15000 }
     );
     const $k = cheerio.load(data);
-    const selectors: Record<string, number> = {};
-    for (const sel of [
-      ".prod_item", ".book_item", "li.item", ".search_item",
-      "[class*='prod_item']", "[class*='book']", "ul.list li",
-      ".result_item", ".list_item", ".prod_info", ".item_info",
-    ]) {
-      selectors[sel] = $k(sel).length;
-    }
-    const bestSel = Object.entries(selectors).sort((a, b) => b[1] - a[1])[0];
-    const firstHtml = bestSel[1] > 0 ? $k(bestSel[0]).first().html()?.slice(0, 1000) : "없음";
-    result.kyobo = { selectors, bestSel, firstHtml };
+    const first = $k(".prod_item").first();
+    const fullHtml = first.html()?.slice(0, 2000) ?? "없음";
+    const imgSrc = first.find("img").first().attr("src") ?? "없음";
+    const imgDataSrc = first.find("img").first().attr("data-src") ?? "없음";
+    const imgDataOriginal = first.find("img").first().attr("data-original") ?? "없음";
+    result.kyobo = { fullHtml, imgSrc, imgDataSrc, imgDataOriginal };
   } catch (e) {
     result.kyobo = { status: "error", message: String(e) };
   }
