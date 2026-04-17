@@ -38,25 +38,28 @@ export async function GET() {
     result.yes24 = { status: "error", message: String(e) };
   }
 
-  // 교보: 다양한 URL 시도
-  const kyoboUrls = [
-    "https://store.kyobobook.co.kr/search?keyword=YBM",
-    "https://search.kyobobook.co.kr/search?keyword=YBM",
-    "https://store.kyobobook.co.kr/api/gw/shop/search/v1/search?keyword=YBM&gbCode=TOT&pageIndex=1&pageSize=20",
-  ];
-  const kyoboResults: Record<string, unknown>[] = [];
-  for (const url of kyoboUrls) {
-    try {
-      const { data, status } = await axios.get(url, { headers: HEADERS, timeout: 8000 });
-      const isJson = typeof data === "object";
-      const preview = isJson ? JSON.stringify(data).slice(0, 300) : String(data).slice(0, 300);
-      kyoboResults.push({ url, status, isJson, preview });
-    } catch (e: unknown) {
-      const err = e as { response?: { status: number }; message: string };
-      kyoboResults.push({ url, error: err?.response?.status ?? err.message });
+  // 교보: search.kyobobook.co.kr 셀렉터 파악
+  try {
+    const { data } = await axios.get(
+      "https://search.kyobobook.co.kr/search?keyword=YBM&target=author",
+      { headers: HEADERS, timeout: 10000 }
+    );
+    const $k = cheerio.load(data);
+    const selectors: Record<string, number> = {};
+    for (const sel of [
+      ".prod_item", ".book_item", "li.item", ".search_item",
+      "[class*='prod_item']", "[class*='book']", "[class*='item']",
+      ".result_item", ".list_item", "ul.list li", ".prod_info",
+    ]) {
+      selectors[sel] = $k(sel).length;
     }
+    // 가장 많이 나온 셀렉터의 첫 항목 HTML
+    const bestSel = Object.entries(selectors).sort((a, b) => b[1] - a[1])[0];
+    const firstHtml = bestSel[1] > 0 ? $k(bestSel[0]).first().html()?.slice(0, 1000) : "없음";
+    result.kyobo = { selectors, bestSel, firstHtml };
+  } catch (e) {
+    result.kyobo = { status: "error", message: String(e) };
   }
-  result.kyobo = kyoboResults;
 
   return NextResponse.json(result, { status: 200 });
 }
