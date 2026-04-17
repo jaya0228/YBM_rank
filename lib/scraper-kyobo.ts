@@ -1,47 +1,74 @@
-import axios from "axios";
-import * as cheerio from "cheerio";
 import type { BookRank } from "./scraper-yes24";
 
-const HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  "Accept-Language": "ko-KR,ko;q=0.9",
-  Referer: "https://product.kyobobook.co.kr/",
-};
-
-// 교보문고 베스트셀러에서 YBM 출판사 도서 추출
+// 교보문고는 CSR(React) 앱이라 Puppeteer로 스크래핑
 export async function scrapeKyobo(): Promise<BookRank[]> {
-  const results: BookRank[] = [];
-  const pages = [1, 2, 3];
+  let browser;
+  try {
+    // 로컬 개발: puppeteer 설치 필요, Vercel: @sparticuz/chromium 사용
+    const isLocal = process.env.NODE_ENV === "development";
+    let executablePath: string;
 
-  for (const page of pages) {
-    try {
-      const { data } = await axios.get(
-        `https://product.kyobobook.co.kr/bestseller/total?page=${page}&per=50`,
-        { headers: HEADERS, timeout: 10000 }
+    const chromium = await import("@sparticuz/chromium");
+    const puppeteerCore = await import("puppeteer-core");
+    executablePath = isLocal
+      ? "/usr/bin/chromium-browser" // 로컬 Chromium 경로 (없으면 아래 fallback)
+      : await chromium.default.executablePath();
+    browser = await puppeteerCore.default.launch({
+      args: isLocal ? ["--no-sandbox"] : chromium.default.args,
+      executablePath,
+      headless: true,
+    });
+
+    const page = await browser.newPage();
+    await page.setExtraHTTPHeaders({ "Accept-Language": "ko-KR,ko;q=0.9" });
+
+    const results: BookRank[] = [];
+    const seen = new Set<string>();
+
+    for (const pageNum of [1, 2, 3]) {
+      await page.goto(
+        `https://store.kyobobook.co.kr/bestseller/total/weekly?page=${pageNum}`,
+        { waitUntil: "networkidle2", timeout: 30000 }
       );
-      const $ = cheerio.load(data);
 
-      $(".prod_item").each((idx, el) => {
-        const publisher = $(el).find(".prod_publish").text().trim();
-        if (!publisher.toLowerCase().includes("ybm")) return;
+      // 도서 목록 로딩 대기
+      await page.waitForSelector(".prod_item, .book_item, li[class*='item']", { timeout: 10000 }).catch(() => null);
 
-        const rankText = $(el).find(".rank_num").text().trim();
-        const rank = parseInt(rankText) || (page - 1) * 50 + idx + 1;
-        const title = $(el).find(".prod_name").text().trim();
-        const author = $(el).find(".prod_author").text().trim();
-        const href = $(el).find(".prod_name").attr("href") || $(el).find("a").attr("href") || "";
-        const url = href.startsWith("http") ? href : `https://product.kyobobook.co.kr${href}`;
-        const coverImage = $(el).find("img").attr("src");
+      const books = await page.evaluate((pNum: number) => {
+        const items = document.querySelectorAll(
+          ".prod_item, .book_item, li[class*='best'], li[class*='item']"
+        );
+        const found: Array<{ title: string; author: string; rank: number; url: string; coverImage: string; publisher: string }> = [];
+        items.forEach((el, idx) => {
+          const publisher =
+            el.querySelector(".prod_publish, .publisher, [class*='publish']")?.textContent?.trim() ?? "";
+          if (!publisher.toLowerCase().includes("ybm")) return;
 
-        if (title) {
-          results.push({ title, author, rank, url, coverImage });
+          const rankEl = el.querySelector(".rank_num, .num, [class*='rank']");
+          const rank = parseInt(rankEl?.textContent?.trim() ?? "") || (pNum - 1) * 50 + idx + 1;
+          const titleEl = el.querySelector(".prod_name, .title, [class*='title'] a, h2 a, h3 a");
+          const title = titleEl?.textContent?.trim() ?? "";
+          const author = el.querySelector(".prod_author, .author, [class*='author']")?.textContent?.trim() ?? "";
+          const href = (titleEl as HTMLAnchorElement)?.href ?? el.querySelector("a")?.href ?? "";
+          const coverImage = (el.querySelector("img") as HTMLImageElement)?.src ?? "";
+
+          if (title) found.push({ title, author, rank, url: href, coverImage, publisher });
+        });
+        return found;
+      }, pageNum);
+
+      for (const book of books) {
+        if (!seen.has(book.title)) {
+          seen.add(book.title);
+          results.push(book);
         }
-      });
-    } catch {
-      // 페이지 실패 시 스킵
+      }
     }
-  }
 
-  return results;
+    return results.sort((a, b) => a.rank - b.rank);
+  } catch {
+    return [];
+  } finally {
+    await browser?.close();
+  }
 }
