@@ -1,36 +1,34 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
-import * as cheerio from "cheerio";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  // 교보 상품 상세 페이지에서 실제 이미지 URL 찾기
+const PID = "S000218791163";
+const BID = "9788917243802";
+
+async function getSize(url: string): Promise<number | string> {
   try {
-    const { data } = await axios.get(
-      "https://product.kyobobook.co.kr/detail/S000218791163",
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Accept-Language": "ko-KR,ko;q=0.9",
-        },
-        timeout: 15000,
-      }
-    );
-    const $ = cheerio.load(data);
+    const r = await axios.get(url, { responseType: "arraybuffer", timeout: 6000 });
+    return (r.data as ArrayBuffer).byteLength;
+  } catch { return "실패"; }
+}
 
-    // 모든 img src 수집
-    const imgs: string[] = [];
-    $("img").each((_, el) => {
-      const src = $(el).attr("src") ?? $(el).attr("data-src") ?? "";
-      if (src && src.length > 10) imgs.push(src);
-    });
+export async function GET() {
+  const urls: Record<string, string> = {
+    "200x0":       `https://contents.kyobobook.co.kr/sih/fit-in/200x0/product/${PID}.jpg`,
+    "458x0":       `https://contents.kyobobook.co.kr/sih/fit-in/458x0/product/${PID}.jpg`,
+    "200x290":     `https://contents.kyobobook.co.kr/sih/fit-in/200x290/product/${PID}.jpg`,
+    "direct":      `https://contents.kyobobook.co.kr/product/${PID}.jpg`,
+    "isbn_large":  `https://image.kyobobook.co.kr/images/book/large/${BID.slice(-3)}/b${BID}.jpg`,
+    "isbn_xlarge": `https://image.kyobobook.co.kr/images/book/xlarge/${BID.slice(-3)}/b${BID}.jpg`,
+    "isbn_medium": `https://image.kyobobook.co.kr/images/book/medium/${BID.slice(-3)}/b${BID}.jpg`,
+    "cover_api":   `https://contents.kyobobook.co.kr/sih/fit-in/200x0/cover/${PID}.jpg`,
+  };
 
-    // __NEXT_DATA__ 에 이미지 URL 있는지 확인
-    const nextData = $("script#__NEXT_DATA__").html()?.slice(0, 2000) ?? "없음";
-
-    return NextResponse.json({ imgs: imgs.slice(0, 20), nextData });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) });
+  const results: Record<string, number | string> = {};
+  for (const [key, url] of Object.entries(urls)) {
+    results[key] = await getSize(url);
   }
+
+  return NextResponse.json(results);
 }
