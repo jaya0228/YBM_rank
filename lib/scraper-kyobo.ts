@@ -51,7 +51,7 @@ export async function scrapeKyobo(): Promise<BookRank[]> {
             "";
           const url = href || (pid ? `https://product.kyobobook.co.kr/detail/${pid}` : "");
           const coverImage = pid
-            ? `https://contents.kyobobook.co.kr/sih/fit-in/200x0/product/${pid}.jpg`
+            ? `https://contents.kyobobook.co.kr/sih/fit-in/458x0/product/${pid}.jpg`
             : undefined;
 
           seen.add(title);
