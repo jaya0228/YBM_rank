@@ -3,6 +3,7 @@ import { scrapeYes24 } from "@/lib/scraper-yes24";
 import { scrapeKyobo } from "@/lib/scraper-kyobo";
 import { aggregateRankings } from "@/lib/aggregator";
 
+export const dynamic = "force-dynamic";
 export const revalidate = 3600; // 1시간 캐시
 
 export async function GET() {
