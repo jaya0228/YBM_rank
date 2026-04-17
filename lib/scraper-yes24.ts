@@ -23,8 +23,8 @@ export async function scrapeYes24(): Promise<BookRank[]> {
   const seen = new Set<string>();
 
   const targets = [
-    { cat: "001", pages: [1, 2, 3] },       // 전체 베스트셀러
-    { cat: "001001", pages: [1, 2] },        // 국어/외국어/사전
+    { cat: "001", pages: [1, 2, 3, 4, 5] },    // 전체 베스트셀러
+    { cat: "001001", pages: [1, 2, 3] },        // 국어/외국어/사전
   ];
 
   for (const { cat, pages } of targets) {
@@ -38,7 +38,7 @@ export async function scrapeYes24(): Promise<BookRank[]> {
 
         $(".itemUnit").each((_, el) => {
           const publisher = $(el).find(".authPub.info_pub a").text().trim();
-          if (!publisher.toLowerCase().includes("ybm")) return;
+          if (!publisher.toLowerCase().includes("ybm") && !publisher.includes("와이비엠")) return;
 
           const rankText = $(el).find(".ico.rank").text().trim();
           const rank = parseInt(rankText) || 999;

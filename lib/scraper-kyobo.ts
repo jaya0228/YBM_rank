@@ -42,7 +42,7 @@ export async function scrapeKyobo(): Promise<BookRank[]> {
         items.forEach((el, idx) => {
           const publisher =
             el.querySelector(".prod_publish, .publisher, [class*='publish']")?.textContent?.trim() ?? "";
-          if (!publisher.toLowerCase().includes("ybm")) return;
+          if (!publisher.toLowerCase().includes("ybm") && !publisher.includes("와이비엠")) return;
 
           const rankEl = el.querySelector(".rank_num, .num, [class*='rank']");
           const rank = parseInt(rankEl?.textContent?.trim() ?? "") || (pNum - 1) * 50 + idx + 1;
