@@ -1,18 +1,22 @@
 import type { BookRank } from "./scraper-yes24";
 
-// 교보문고는 CSR(React) 앱이라 Puppeteer로 스크래핑
+function isYbmOrEtsAuthor(author: string): boolean {
+  const lower = author.toLowerCase().replace(/\s+/g, "");
+  return lower.includes("ybm") || lower.includes("ets");
+}
+
+// 교보문고 저자 검색으로 YBM / ETS 전체 도서 수집 (CSR이라 Puppeteer 사용)
 export async function scrapeKyobo(): Promise<BookRank[]> {
   let browser;
   try {
-    // 로컬 개발: puppeteer 설치 필요, Vercel: @sparticuz/chromium 사용
     const isLocal = process.env.NODE_ENV === "development";
-    let executablePath: string;
 
     const chromium = await import("@sparticuz/chromium");
     const puppeteerCore = await import("puppeteer-core");
-    executablePath = isLocal
-      ? "/usr/bin/chromium-browser" // 로컬 Chromium 경로 (없으면 아래 fallback)
+    const executablePath = isLocal
+      ? "/usr/bin/chromium-browser"
       : await chromium.default.executablePath();
+
     browser = await puppeteerCore.default.launch({
       args: isLocal ? ["--no-sandbox"] : chromium.default.args,
       executablePath,
@@ -24,48 +28,83 @@ export async function scrapeKyobo(): Promise<BookRank[]> {
 
     const results: BookRank[] = [];
     const seen = new Set<string>();
+    let globalRank = 1;
 
-    for (const pageNum of [1, 2, 3]) {
-      await page.goto(
-        `https://store.kyobobook.co.kr/bestseller/total/weekly?page=${pageNum}`,
-        { waitUntil: "networkidle2", timeout: 30000 }
-      );
+    // YBM과 ETS 각각 검색
+    const queries = ["YBM", "ETS"];
 
-      // 도서 목록 로딩 대기
-      await page.waitForSelector(".prod_item, .book_item, li[class*='item']", { timeout: 10000 }).catch(() => null);
+    for (const query of queries) {
+      for (const pageNum of [1, 2, 3]) {
+        try {
+          await page.goto(
+            `https://store.kyobobook.co.kr/search?keyword=${encodeURIComponent(query)}&target=author&page=${pageNum}`,
+            { waitUntil: "networkidle2", timeout: 30000 }
+          );
 
-      const books = await page.evaluate((pNum: number) => {
-        const items = document.querySelectorAll(
-          ".prod_item, .book_item, li[class*='best'], li[class*='item']"
-        );
-        const found: Array<{ title: string; author: string; rank: number; url: string; coverImage: string; publisher: string }> = [];
-        items.forEach((el, idx) => {
-          const publisher =
-            el.querySelector(".prod_publish, .publisher, [class*='publish']")?.textContent?.trim() ?? "";
-          if (!publisher.toLowerCase().includes("ybm") && !publisher.includes("와이비엠")) return;
+          await page
+            .waitForSelector(".prod_item, li[class*='item'], [class*='search'] li", {
+              timeout: 10000,
+            })
+            .catch(() => null);
 
-          const rankEl = el.querySelector(".rank_num, .num, [class*='rank']");
-          const rank = parseInt(rankEl?.textContent?.trim() ?? "") || (pNum - 1) * 50 + idx + 1;
-          const titleEl = el.querySelector(".prod_name, .title, [class*='title'] a, h2 a, h3 a");
-          const title = titleEl?.textContent?.trim() ?? "";
-          const author = el.querySelector(".prod_author, .author, [class*='author']")?.textContent?.trim() ?? "";
-          const href = (titleEl as HTMLAnchorElement)?.href ?? el.querySelector("a")?.href ?? "";
-          const coverImage = (el.querySelector("img") as HTMLImageElement)?.src ?? "";
+          const books = await page.evaluate(() => {
+            const selectors = [
+              ".prod_item",
+              "li[class*='item']",
+              "[class*='search_list'] li",
+              "[class*='result'] li",
+            ];
+            let items: NodeListOf<Element> | null = null;
+            for (const sel of selectors) {
+              const found = document.querySelectorAll(sel);
+              if (found.length > 0) {
+                items = found;
+                break;
+              }
+            }
+            if (!items) return [];
 
-          if (title) found.push({ title, author, rank, url: href, coverImage, publisher });
-        });
-        return found;
-      }, pageNum);
+            const found: Array<{
+              title: string;
+              author: string;
+              url: string;
+              coverImage: string;
+            }> = [];
 
-      for (const book of books) {
-        if (!seen.has(book.title)) {
-          seen.add(book.title);
-          results.push(book);
+            items.forEach((el) => {
+              const authorEl = el.querySelector(
+                ".prod_author, [class*='author'], [class*='writer']"
+              );
+              const author = authorEl?.textContent?.trim() ?? "";
+
+              const titleEl = el.querySelector(
+                ".prod_name a, [class*='title'] a, h2 a, h3 a, a[class*='name']"
+              );
+              const title = titleEl?.textContent?.trim() ?? "";
+              const href = (titleEl as HTMLAnchorElement)?.href ?? "";
+              const coverImage =
+                (el.querySelector("img") as HTMLImageElement)?.src ?? "";
+
+              if (title && author) {
+                found.push({ title, author, url: href, coverImage });
+              }
+            });
+            return found;
+          });
+
+          for (const book of books) {
+            if (!isYbmOrEtsAuthor(book.author)) continue;
+            if (seen.has(book.title)) continue;
+            seen.add(book.title);
+            results.push({ ...book, rank: globalRank++ });
+          }
+        } catch {
+          // 페이지 실패 시 스킵
         }
       }
     }
 
-    return results.sort((a, b) => a.rank - b.rank);
+    return results;
   } catch {
     return [];
   } finally {
