@@ -27,7 +27,9 @@ async function fetchEucKr(url: string): Promise<string> {
     timeout: 15000,
     responseType: "arraybuffer",
   });
-  return new TextDecoder("euc-kr").decode(data as ArrayBuffer);
+  const decoded = new TextDecoder("euc-kr").decode(data as ArrayBuffer);
+  // cheerio가 charset=euc-kr 메타태그 보고 재해석하지 않도록 utf-8로 교체
+  return decoded.replace(/charset=["']?euc-kr["']?/gi, 'charset="utf-8"');
 }
 
 // Yes24 검색은 JS 렌더링이라 서버에서 안 됨 → SSR 베스트셀러 페이지 사용
