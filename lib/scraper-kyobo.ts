@@ -1,113 +1,63 @@
+import axios from "axios";
+import * as cheerio from "cheerio";
 import type { BookRank } from "./scraper-yes24";
 
-function isYbmOrEtsAuthor(author: string): boolean {
-  const lower = author.toLowerCase().replace(/\s+/g, "");
+const HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
+  "Connection": "keep-alive",
+};
+
+function isYbmOrEts(text: string): boolean {
+  const lower = text.toLowerCase().replace(/\s+/g, "");
   return lower.includes("ybm") || lower.includes("ets");
 }
 
-// 교보문고 저자 검색으로 YBM / ETS 전체 도서 수집 (CSR이라 Puppeteer 사용)
+// Puppeteer 제거 — search.kyobobook.co.kr는 SSR HTML 반환
 export async function scrapeKyobo(): Promise<BookRank[]> {
-  let browser;
-  try {
-    const isLocal = process.env.NODE_ENV === "development";
+  const results: BookRank[] = [];
+  const seen = new Set<string>();
+  let globalRank = 1;
 
-    const chromium = await import("@sparticuz/chromium");
-    const puppeteerCore = await import("puppeteer-core");
-    const executablePath = isLocal
-      ? "/usr/bin/chromium-browser"
-      : await chromium.default.executablePath();
+  const queries = ["YBM", "ETS"];
 
-    browser = await puppeteerCore.default.launch({
-      args: isLocal ? ["--no-sandbox"] : chromium.default.args,
-      executablePath,
-      headless: true,
-    });
+  for (const query of queries) {
+    for (const page of [1, 2, 3]) {
+      try {
+        const { data } = await axios.get(
+          `https://search.kyobobook.co.kr/search?keyword=${encodeURIComponent(query)}&page=${page}`,
+          { headers: HEADERS, timeout: 15000 }
+        );
+        const $ = cheerio.load(data);
 
-    const page = await browser.newPage();
-    await page.setExtraHTTPHeaders({ "Accept-Language": "ko-KR,ko;q=0.9" });
+        $(".prod_item").each((_, el) => {
+          const checkbox = $(el).find("input.result_checkbox");
+          const title = checkbox.attr("data-name")?.trim() ?? $(el).find("a.prod_link").first().text().trim();
+          if (!title || seen.has(title)) return;
 
-    const results: BookRank[] = [];
-    const seen = new Set<string>();
-    let globalRank = 1;
+          const authorText =
+            $(el).find(".prod_author").text().trim() ||
+            $(el).find(".author").text().trim();
 
-    // YBM과 ETS 각각 검색
-    const queries = ["YBM", "ETS"];
+          // 저자 또는 제목에 YBM/ETS 포함 여부 확인
+          if (!isYbmOrEts(authorText) && !isYbmOrEts(title)) return;
 
-    for (const query of queries) {
-      for (const pageNum of [1, 2, 3]) {
-        try {
-          await page.goto(
-            `https://store.kyobobook.co.kr/search?keyword=${encodeURIComponent(query)}&target=author&page=${pageNum}`,
-            { waitUntil: "networkidle2", timeout: 30000 }
-          );
+          const pid = checkbox.attr("data-pid") ?? "";
+          const href = $(el).find("a.prod_link").attr("href") ?? "";
+          const url = href || (pid ? `https://product.kyobobook.co.kr/detail/${pid}` : "");
+          const coverImage =
+            $(el).find("img").attr("src") ||
+            $(el).find("img").attr("data-src");
 
-          await page
-            .waitForSelector(".prod_item, li[class*='item'], [class*='search'] li", {
-              timeout: 10000,
-            })
-            .catch(() => null);
-
-          const books = await page.evaluate(() => {
-            const selectors = [
-              ".prod_item",
-              "li[class*='item']",
-              "[class*='search_list'] li",
-              "[class*='result'] li",
-            ];
-            let items: NodeListOf<Element> | null = null;
-            for (const sel of selectors) {
-              const found = document.querySelectorAll(sel);
-              if (found.length > 0) {
-                items = found;
-                break;
-              }
-            }
-            if (!items) return [];
-
-            const found: Array<{
-              title: string;
-              author: string;
-              url: string;
-              coverImage: string;
-            }> = [];
-
-            items.forEach((el) => {
-              const authorEl = el.querySelector(
-                ".prod_author, [class*='author'], [class*='writer']"
-              );
-              const author = authorEl?.textContent?.trim() ?? "";
-
-              const titleEl = el.querySelector(
-                ".prod_name a, [class*='title'] a, h2 a, h3 a, a[class*='name']"
-              );
-              const title = titleEl?.textContent?.trim() ?? "";
-              const href = (titleEl as HTMLAnchorElement)?.href ?? "";
-              const coverImage =
-                (el.querySelector("img") as HTMLImageElement)?.src ?? "";
-
-              if (title && author) {
-                found.push({ title, author, url: href, coverImage });
-              }
-            });
-            return found;
-          });
-
-          for (const book of books) {
-            if (!isYbmOrEtsAuthor(book.author)) continue;
-            if (seen.has(book.title)) continue;
-            seen.add(book.title);
-            results.push({ ...book, rank: globalRank++ });
-          }
-        } catch {
-          // 페이지 실패 시 스킵
-        }
+          seen.add(title);
+          results.push({ title, author: authorText || query, rank: globalRank++, url, coverImage });
+        });
+      } catch {
+        // 페이지 실패 시 스킵
       }
     }
-
-    return results;
-  } catch {
-    return [];
-  } finally {
-    await browser?.close();
   }
+
+  return results;
 }

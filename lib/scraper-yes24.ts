@@ -11,8 +11,11 @@ export interface BookRank {
 
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  "Accept-Language": "ko-KR,ko;q=0.9",
-  Referer: "https://www.yes24.com/",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Connection": "keep-alive",
+  "Referer": "https://www.yes24.com/",
 };
 
 function isYbmAuthor(author: string): boolean {
@@ -29,7 +32,7 @@ export async function scrapeYes24(): Promise<BookRank[]> {
     try {
       const { data } = await axios.get(
         `https://www.yes24.com/Product/Search?domain=BOOK&query=%EC%99%80%EC%9D%B4%EB%B9%84%EC%97%A0&keyfield=author&PageNumber=${page}`,
-        { headers: HEADERS, timeout: 10000 }
+        { headers: HEADERS, timeout: 20000 }
       );
       const $ = cheerio.load(data);
 
@@ -45,13 +48,12 @@ export async function scrapeYes24(): Promise<BookRank[]> {
         if (!title || seen.has(title)) return;
 
         const url = `https://www.yes24.com${href}`;
-        const author = authorText;
         const coverImage =
           $(el).parent().find("img.lazy").attr("data-original") ||
           $(el).parent().find("img").attr("src");
 
         seen.add(title);
-        results.push({ title, author, rank: globalRank++, url, coverImage });
+        results.push({ title, author: authorText, rank: globalRank++, url, coverImage });
       });
     } catch {
       // 페이지 실패 시 스킵
